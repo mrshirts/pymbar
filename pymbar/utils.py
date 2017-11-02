@@ -1,23 +1,22 @@
 ##############################################################################
 # pymbar: A Python Library for MBAR
 #
-# Copyright 2010-2014 University of Virginia, Memorial Sloan-Kettering Cancer Center
+# Copyright 2016-2017 University of Colorado Boulder
+# Copyright 2010-2017 Memorial Sloan-Kettering Cancer Center
+# Portions of this software are Copyright 2010-2016 University of Virginia
 #
 # Authors: Michael Shirts, John Chodera
-# Contributors: Kyle Beauchamp
+# Contributors: Kyle Beauchamp, Levi Naden
 #
 # pymbar is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Lesser General Public License as
-# published by the Free Software Foundation, either version 2.1
-# of the License, or (at your option) any later version.
+# it under the terms of the MIT License
 #
 # This library is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Lesser General Public License for more details.
+# MIT License for more details.
 #
-# You should have received a copy of the GNU Lesser General Public
-# License along with pymbar. If not, see <http://www.gnu.org/licenses/>.
+# You should have received a copy of the MIT License along with pymbar.
 ##############################################################################
 
 ##############################################################################
@@ -43,6 +42,7 @@ except ImportError:
 class TypeCastPerformanceWarning(RuntimeWarning):
     pass
 
+
 def kln_to_kn(kln, N_k = None, cleanup = False):
 
     """ Convert KxKxN_max array to KxN max array
@@ -67,7 +67,7 @@ def kln_to_kn(kln, N_k = None, cleanup = False):
     # rewrite into kn shape
     [K, L, N_max] = np.shape(kln)
 
-    if N_k == None:
+    if N_k is None:
         # We assume that all N_k are N_max.
         # Not really an easier way to do this without being given the answer.
         N_k = N_max * np.ones([L], dtype=np.int64)
@@ -83,6 +83,7 @@ def kln_to_kn(kln, N_k = None, cleanup = False):
         del(kln)  # very big, let's explicitly delete
 
     return kn
+
 
 def kn_to_n(kn, N_k = None, cleanup = False):
 
@@ -107,7 +108,7 @@ def kn_to_n(kn, N_k = None, cleanup = False):
     # rewrite into kn shape
     [K, N_max] = np.shape(kn)
 
-    if N_k == None:
+    if N_k is None:
         # We assume that all N_k are N_max.
         # Not really an easier way to do this without being given the answer.
         N_k = N_max*np.ones([K], dtype=np.int64)
@@ -122,6 +123,7 @@ def kn_to_n(kn, N_k = None, cleanup = False):
     if cleanup:
         del(kn)  # very big, let's explicitly delete
     return n
+
 
 def ensure_type(val, dtype, ndim, name, length=None, can_be_none=False, shape=None,
                 warn_on_cast=True, add_newaxis_on_deficient_ndim=False):
@@ -326,9 +328,51 @@ def logsumexp(a, axis=None, b=None, use_numexpr=True):
 
     return out
 
-#=============================================================================================
+
+def check_w_normalized(W, N_k, tolerance = 1.0e-4):
+    """Check the weight matrix W is properly normalized. The sum over N should be 1, and the sum over k by N_k should aslo be 1
+
+    Parameters
+    ----------
+    W : np.ndarray, shape=(N, K), dtype='float'
+        The normalized weight matrix for snapshots and states.
+        W[n, k] is the weight of snapshot n in state k.
+    N_k : np.ndarray, shape=(K), dtype='int'
+        N_k[k] is the number of samples from state k.
+    tolerance : float, optional, default=1.0e-4
+        Tolerance for checking equality of sums
+
+    Returns
+    -------
+    None : NoneType
+        Returns a None object if test passes, otherwise raises a ParameterError with appropriate message if W is not normalized within tolerance.
+    """
+
+    [N, K] = W.shape
+
+    column_sums = np.sum(W, axis=0)
+    badcolumns = (np.abs(column_sums - 1) > tolerance)
+    if np.any(badcolumns):
+        which_badcolumns = np.arange(K)[badcolumns]
+        firstbad = which_badcolumns[0]
+        raise ParameterError(
+            'Warning: Should have \sum_n W_nk = 1.  Actual column sum for state %d was %f. %d other columns have similar problems' %
+            (firstbad, column_sums[firstbad], np.sum(badcolumns)))
+
+    row_sums = np.sum(W * N_k, axis=1)
+    badrows = (np.abs(row_sums - 1) > tolerance)
+    if np.any(badrows):
+        which_badrows = np.arange(N)[badrows]
+        firstbad = which_badrows[0]
+        raise ParameterError(
+            'Warning: Should have \sum_k N_k W_nk = 1.  Actual row sum for sample %d was %f. %d other rows have similar problems' %
+            (firstbad, row_sums[firstbad], np.sum(badrows)))
+
+    return
+
+# ============================================================================================
 # Exception classes
-#=============================================================================================
+# =============================================================================================
 
 
 class ParameterError(Exception):

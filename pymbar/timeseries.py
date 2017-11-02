@@ -1,25 +1,24 @@
 ##############################################################################
 # pymbar: A Python Library for MBAR
 #
-# Copyright 2010-2014 University of Virginia, Memorial Sloan-Kettering Cancer Center
+# Copyright 2016-2017 University of Colorado Boulder
+# Copyright 2010-2017 Memorial Sloan-Kettering Cancer Center
+# Portions of this software are Copyright (c) 2010-2016 University of Virginia
 # Portions of this software are Copyright (c) 2006-2007 The Regents of the University of California.  All Rights Reserved.
 # Portions of this software are Copyright (c) 2007-2008 Stanford University and Columbia University.
 #
 # Authors: Michael Shirts, John Chodera
-# Contributors: Kyle Beauchamp
+# Contributors: Kyle Beauchamp, Levi Naden
 #
 # pymbar is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Lesser General Public License as
-# published by the Free Software Foundation, either version 2.1
-# of the License, or (at your option) any later version.
+# it under the terms of the MIT License
 #
 # This library is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Lesser General Public License for more details.
+# MIT License for more details.
 #
-# You should have received a copy of the GNU Lesser General Public
-# License along with pymbar. If not, see <http://www.gnu.org/licenses/>.
+# You should have received a copy of the MIT License along with pymbar.
 ##############################################################################
 
 """
@@ -50,29 +49,29 @@ JCTC 3(1):26-41, 2007.
 
 
 __authors__ = "Michael R. Shirts and John D. Chodera."
-__license__ = "GPL 2.0"
+__license__ = "MIT"
 
-#=============================================================================================
+
+# =============================================================================================
 # IMPORTS
-#=============================================================================================
+# =============================================================================================
 import math
+import warnings
 import numpy as np
 import numpy.linalg
 from pymbar.utils import ParameterError
 
-#=============================================================================================
+# =============================================================================================
 # Issue warning on import.
-#=============================================================================================
+# =============================================================================================
 
 LongWarning = "Warning on use of the timeseries module: If the inherent timescales of the system are long compared to those being analyzed, this statistical inefficiency may be an underestimate.  The estimate presumes the use of many statistically independent samples.  Tests should be performed to assess whether this condition is satisfied.   Be cautious in the interpretation of the data."
 
 #sys.stderr.write(LongWarning + '\n')
 
-#=============================================================================================
+# =============================================================================================
 # METHODS
-#=============================================================================================
-
-#=============================================================================================
+# =============================================================================================
 
 
 def statisticalInefficiency(A_n, B_n=None, fast=False, mintime=3, fft=False):
@@ -356,7 +355,13 @@ def statisticalInefficiencyMultiple(A_kn, fast=False, return_correlation_functio
 
 
 def integratedAutocorrelationTime(A_n, B_n=None, fast=False, mintime=3):
-    """Estimate the integrated autocorrelation time."""
+    """Estimate the integrated autocorrelation time.
+
+    See Also
+    --------
+    statisticalInefficiency
+
+    """
 
     g = statisticalInefficiency(A_n, B_n, fast, mintime)
     tau = (g - 1.0) / 2.0
@@ -365,7 +370,13 @@ def integratedAutocorrelationTime(A_n, B_n=None, fast=False, mintime=3):
 
 
 def integratedAutocorrelationTimeMultiple(A_kn, fast=False):
-    """Estimate the integrated autocorrelation time from multiple timeseries."""
+    """Estimate the integrated autocorrelation time from multiple timeseries.
+
+    See Also
+    --------
+    statisticalInefficiencyMultiple
+
+    """
 
     g = statisticalInefficiencyMultiple(A_kn, fast, False)
     tau = (g - 1.0) / 2.0
@@ -373,7 +384,7 @@ def integratedAutocorrelationTimeMultiple(A_kn, fast=False):
 #=============================================================================================
 
 
-def normalizedFluctuationCorrelationFunction(A_n, B_n=None, N_max=None):
+def normalizedFluctuationCorrelationFunction(A_n, B_n=None, N_max=None, norm=True):
     """Compute the normalized fluctuation (cross) correlation function of (two) stationary timeseries.
 
     C(t) = (<A(t) B(t)> - <A><B>) / (<AB> - <A><B>)
@@ -388,6 +399,8 @@ def normalizedFluctuationCorrelationFunction(A_n, B_n=None, N_max=None):
         B_n[n] is nth value of timeseries B.  Length is deduced from vector.
     N_max : int, default=None
         if specified, will only compute correlation function out to time lag of N_max
+    norm: bool, optional, default=True
+        if False will return the unnormalized correlation function D(t) = <A(t) B(t)>
 
     Returns
     -------
@@ -455,18 +468,21 @@ def normalizedFluctuationCorrelationFunction(A_n, B_n=None, N_max=None):
     # allocate storage for normalized fluctuation correlation function
     C_n = np.zeros([N_max + 1], np.float64)
 
-    # Compute normalized correlation funtion.
+    # Compute normalized correlation function.
     t = 0
     for t in range(0, N_max + 1):
         # compute normalized fluctuation correlation function at time t
         C_n[t] = np.sum(dA_n[0:(N - t)] * dB_n[t:N] + dB_n[0:(N - t)] * dA_n[t:N]) / (2.0 * float(N - t) * sigma2_AB)
 
     # Return the computed correlation function
-    return C_n
+    if norm:
+        return C_n
+    else:
+        return C_n*sigma2_AB + mu_A*mu_B
 #=============================================================================================
 
 
-def normalizedFluctuationCorrelationFunctionMultiple(A_kn, B_kn=None, N_max=None):
+def normalizedFluctuationCorrelationFunctionMultiple(A_kn, B_kn=None, N_max=None, norm=True, truncate=False):
     """Compute the normalized fluctuation (cross) correlation function of (two) timeseries from multiple timeseries samples.
 
     C(t) = (<A(t) B(t)> - <A><B>) / (<AB> - <A><B>)
@@ -480,6 +496,10 @@ def normalizedFluctuationCorrelationFunctionMultiple(A_kn, B_kn=None, N_max=None
         B_kn[k] is the kth timeseries, and B_kn[k][n] is nth value of timeseries k.  B_kn[k] must have same length as A_kn[k]
     N_max : int, optional, default=None
         if specified, will only compute correlation function out to time lag of N_max
+    norm: bool, optional, default=True
+        if False, will return unnormalized D(t) = <A(t) B(t)>
+    truncate: bool, optional, default=False
+        if True, will stop calculating the correlation function when it goes below 0
 
     Returns
     -------
@@ -578,6 +598,7 @@ def normalizedFluctuationCorrelationFunctionMultiple(A_kn, B_kn=None, N_max=None
     # this is unlikely to occur unless the correlation function has decayed to the point where it
     # is dominated by noise and indistinguishable from zero.
     t = 0
+    negative = False
     for t in range(0, N_max + 1):
         # compute unnormalized correlation function
         numerator = 0.0
@@ -587,6 +608,8 @@ def normalizedFluctuationCorrelationFunctionMultiple(A_kn, B_kn=None, N_max=None
                 continue  # skip this trajectory if t is longer than the timeseries
             numerator += np.sum(dA_kn[k][0:(N_k[k] - t)] * dB_kn[k][t:N_k[k]])
             denominator += float(N_k[k] - t)
+            if truncate and numerator < 0:
+                negative = True
         C = numerator / denominator
 
         # compute normalized fluctuation correlation function at time t
@@ -595,8 +618,14 @@ def normalizedFluctuationCorrelationFunctionMultiple(A_kn, B_kn=None, N_max=None
         # Store correlation function.
         C_n[t] = C
 
+        if negative:
+            break
+
     # Return the computed fluctuation correlation function.
-    return C_n
+    if norm:
+        return C_n[:t]
+    else:
+        return C_n[:t]*sigma2_AB + mu_A*mu_B
 #=============================================================================================
 
 
@@ -775,7 +804,7 @@ def detectEquilibration(A_t, fast=True, nskip=1):
     return (t, g, Neff_max)
 
 
-def statisticalInefficiency_fft(A_n, mintime=3, memsafe=True):
+def statisticalInefficiency_fft(A_n, mintime=3, memsafe=None):
     """Compute the (cross) statistical inefficiency of (two) timeseries.
 
     Parameters
@@ -787,10 +816,11 @@ def statisticalInefficiency_fft(A_n, mintime=3, memsafe=True):
         The algorithm terminates after computing the correlation time out to mintime when the
         correlation function first goes negative.  Note that this time may need to be increased
         if there is a strong initial negative peak in the correlation function.
-    memsafe: bool, optional, default=True
+    memsafe: bool, optional, default=None (in depreciation)
         If this function is used several times on arrays of comparable size then one might benefit 
         from setting this option to False. If set to True then clear np.fft cache to avoid a fast 
         increase in memory consumption when this function is called on many arrays of different sizes.
+
     Returns
     -------
     g : np.ndarray,
@@ -812,7 +842,7 @@ def statisticalInefficiency_fft(A_n, mintime=3, memsafe=True):
     try:
         import statsmodels.api as sm
     except ImportError as err:
-        err.message += "\n You need to install statsmodels to use the FFT based correlation function."
+        err.args = (err.args[0] + "\n You need to install statsmodels to use the FFT based correlation function.",)
         raise
 
     # Create np copies of input arguments.
@@ -824,12 +854,25 @@ def statisticalInefficiency_fft(A_n, mintime=3, memsafe=True):
     C_t = sm.tsa.stattools.acf(A_n, fft=True, unbiased=True, nlags=N)
     t_grid = np.arange(N).astype('float')
     g_t = 2.0 * C_t * (1.0 - t_grid / float(N))
-    
+
+    """
+    LNN Note:
+    Numpy 1.12 fft.fftpack swiched from using a Python dict for the cache to a LRU cache which auto prunes.
+    This makes the .clear() method undefined since the LRU does not have such a method.
+
+    Since the LRU *should* remove the problems which this code resolved (GH issue #168), I am removing this code from
+    execution. However, there may still be a problem with the LRU cache so I am leaving the code in case we need to
+    further test it
+    """
     #make function memory safe by clearing np.fft cache
     #this assumes that statsmodels uses np.fft
-    if memsafe:
-        np.fft.fftpack._fft_cache.clear()
-        np.fft.fftpack._real_fft_cache.clear()
+    #if memsafe:
+    #    np.fft.fftpack._fft_cache.clear()
+    #    np.fft.fftpack._real_fft_cache.clear()
+    if memsafe is not None:
+        warnings.warn("NumPy's FFT pack now uses an LRU cache to fix the very problem that the memsafe keyword "
+                      "was protecting. This argument no longer changes the code and will be removed in a future "
+                      "version.", FutureWarning)
     
     try:
         ind = np.where((C_t <= 0) & (t_grid > mintime))[0][0]
@@ -839,7 +882,7 @@ def statisticalInefficiency_fft(A_n, mintime=3, memsafe=True):
     g = 1.0 + g_t[1:ind].sum()
     g = max(1.0, g)
 
-    return g #, g_t, C_t
+    return g  # , g_t, C_t
 
 
 def detectEquilibration_binary_search(A_t, bs_nodes=10):

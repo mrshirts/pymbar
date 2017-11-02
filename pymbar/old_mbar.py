@@ -1,7 +1,9 @@
 ##############################################################################
 # pymbar: A Python Library for MBAR
-#
-# Copyright 2010-2014 University of Virginia, Memorial Sloan-Kettering Cancer Center
+
+# Copyright 2016-2017 University of Colorado Boulder
+# Copyright 2010-2017 Memorial Sloan-Kettering Cancer Center
+# Portions of this software are Copyright 2010-2014 University of Virginia,
 # Portions of this software are Copyright (c) 2006-2007 The Regents of the University of California.  All Rights Reserved.
 # Portions of this software are Copyright (c) 2007-2008 Stanford University and Columbia University.
 #
@@ -9,17 +11,14 @@
 # Contributors: Kyle Beauchamp
 #
 # pymbar is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Lesser General Public License as
-# published by the Free Software Foundation, either version 2.1
-# of the License, or (at your option) any later version.
+# it under the terms of the MIT License
 #
 # This library is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Lesser General Public License for more details.
+# MIT License for more details.
 #
-# You should have received a copy of the GNU Lesser General Public
-# License along with pymbar. If not, see <http://www.gnu.org/licenses/>.
+# You should have received a copy of the MIT License along with pymbar.
 ##############################################################################
 
 """
@@ -1426,7 +1425,7 @@ class MBAR:
         >>> import numpy as np
         >>> N_tot = N_k.sum()
         >>> x_n_sorted = np.sort(x_n) # unroll to n-indices
-        >>> bins = np.append(x_n_sorted[0::(N_tot/nbins)], x_n_sorted.max()+0.1)
+        >>> bins = np.append(x_n_sorted[0::int(N_tot/nbins)], x_n_sorted.max()+0.1)
         >>> bin_widths = bins[1:] - bins[0:-1]
         >>> bin_n = np.zeros(x_n.shape, np.int32)
         >>> bin_n = np.digitize(x_n, bins) - 1
