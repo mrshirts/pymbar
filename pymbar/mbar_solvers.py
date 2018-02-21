@@ -275,6 +275,10 @@ def adaptive(u_kn, N_k, f_k, tol = 1.0e-12, options = None):
     if options['verbose'] == True:
         print("Determining dimensionless free energies by Newton-Raphson / self-consistent iteration.")
 
+    import pdb
+    pdb.set_trace()
+    test1 = mbar_W_nk(u_kn, N_k, f_k)
+
     if tol < 1.5e-15:
         print("Tolerance may be too close to machine precision to converge.")
     # keep track of Newton-Raphson and self-consistent iterations
@@ -607,6 +611,154 @@ def solve_mbar_with_subsampling(u_kn, N_k, f_k, solver_protocol, subsampling_pro
         else:
             f_k_nonzero, all_results = solve_mbar(u_kn[states_with_samples], N_k[states_with_samples], f_k[states_with_samples], solver_protocol=subsampling_protocol)
 
+        f_k[states_with_samples] = f_k_nonzero
+        f_k_nonzero, all_results = solve_mbar(u_kn[states_with_samples], N_k[states_with_samples], f_k[states_with_samples], solver_protocol=solver_protocol)
+
+    f_k[states_with_samples] = f_k_nonzero
+
+    # Update all free energies because those from states with zero samples are not correctly computed by Newton-Raphson.
+    f_k = self_consistent_update(u_kn, N_k, f_k)
+    f_k -= f_k[0]  # This is necessary because state 0 might have had zero samples, but we still want that state to be the reference with free energy 0.
+
+    return f_k
+
+
+def solve_mbar_with_smearing(u_kn, N_k, f_k, solver_protocol, binning_protocol, x_kindices=None):
+
+    """bin the u_kn to reduce the number of samples.
+
+    Parameters
+    ----------
+    u_kn : np.ndarray, shape=(n_states, n_samples), dtype='float'
+        The reduced potential energies, i.e. -log unnormalized probabilities
+    N_k : np.ndarray, shape=(n_states), dtype='int'
+        The number of samples in each state
+    f_k : np.ndarray, shape=(n_states), dtype='float'
+        The reduced free energies of each state
+    solver_protocol: tuple(dict()), optional, default=None
+        Sequence of dictionaries of steps in solver protocol for final
+        stage of refinement.
+    binning_protocol: tuple(dict()), optional, default=None
+        Sequence of dictionaries of steps in solver protocol for first
+        stage of refinement with binned dataset.
+
+    Returns
+    -------
+    f_k : np.ndarray, shape=(n_states), dtype='float'
+        The free energies of states
+
+    Theory: take N distributions p_i(x) = exp(f_i-u_i(x)).
+    Approximate the x by histogramming, so we have b bins in energy,
+    so that each u_i(x) = u_ib, with the occupancy of each bin
+    changing with each i. We denote the occupancy as N_i(b).
+    
+    We then approximate p_i(x) by the discrete distribution q_i(x_b) =
+    N_i(b) exp(f_i - u_i(x_b))). Then the mixture distribution will be
+    q_m(x_b) = N \sum_i n_i q_i(x_b). 
+
+    We then want to perform importance sampling from the mixture
+    distribution. 
+
+    <O>_i = \sum_m O q_i(x_b) / \sum_k (n_k/N) q_k(x_b)
+
+    Then replace with 1 to get normalization. In this case, we
+    actually have the full discrete distribution.
+
+    1 = \int q_i(x_b) / \sum_k (n_k/N) q_k(x_b)
+    1 = \int N_i(x_b) exp(f_i - u_i(x_b)) / \sum_k (n_k/N) N_k(x_b) q_k(x_b)
+
+    Two ways of doing the binning.  Pick a single x_b that we assume
+    is representative from each subsample. But isn't that just the
+    same as subsampling? The only difference is in making sure that we
+    have bridging samples for all states.
+
+    The second is to come up with a binning matrix.  We can have a
+    conditional matrix that if state I has energy N_bi, then what is
+    the chance that state K has N_bj?
+
+    exp(-f_i) = \int N_i(x_b) exp(- u_i(x_b)) / \sum_k (n_k/N) N_k(x_b) q_k(x_b)
+    exp(-f_i) = \int N_i(x_b) exp(- u_i(x_b)) / \sum_k (n_k/N) N_k(x_b) exp(f_k u_k(x_b) 
+    exp(-f_i) = \int exp(- u_i(x_b) + ln N_i(x_b)) / \sum_k (n_k/N) N_k(x_b) exp(f_k - u_k(x_b) + ln N_k(x_b))
+
+    We then first need to generate an estimate of what u_k(x_b) is
+    when x_b is binned. The main issue is that we don't have the x_b
+    necessarily - all we know is the correlation beween the different
+    values of u_k.  If we bin over the entire range, then u_k(x_b)
+    will be defined for all states.
+
+    exp(-f_i) = \sum_b N_b exp(-u_i(x_b)) / \sum_k (n_k/N) exp(f_k - u_k(x_b))
+
+    or if we do it in terms of a mixture distribution: 
+
+    exp(-f_i) = \sum_b N_i(b) exp(-u_i(x_b)) / \sum_k (n_k/N) N_k(b) exp(f_k - u_k(x_b))
+
+    So the N_i(b) will be the occupancy of each bin.  But the occupancy is the same; it's the energy of each bin
+    that is the issue.
+
+    """
+    states_with_samples = np.where(N_k > 0)[0]
+
+    # come up with a good algorithm for picking bins?
+
+
+    ### Try: tweaked subsampling
+    ## what we should see when we look at state K is lack of an energy gap if we histogram all the energies
+    ## TODO: test to see if this is the case.
+
+    N_k_samples = len(N_k[states_with_samples])
+    ## we need to identify the matrix of overlaps.  We look over the pairwise states, and see if there is overlap. 
+    sum_Nk = np.zeros(N_k_samples)+1)
+    for i in range(N_k_samples):
+        sum_Nk[i+1] = sum_Nk[i] + N_k[states_with_samples[i]]
+    
+    minmax = np.zeros([2,N_k_samples,N_k_samples]
+    # generate a matrix of overlaps (From min/max)
+    for i in range(len(N_k)):
+        binnum = np.min(100,N_k[i])
+        irange = sum_Nk[i]:sum_N[i+1]
+        for j in range(len(N_k)):
+            d1 = np.min(u_kn[irange,j])
+
+    for i in range(len(N_k)):
+        d1 = np.histogram(u_kn[i,:],bins=20*len(N_k))
+    nbins = 10*len(N_k)
+    if len(states_with_samples) == 1:
+        f_k_nonzero = np.array([0.0])
+    else:
+        # first find out the width of bin in energy to use.
+        bin_k = np.zeros([len(states_with_samples),nbins],dtype=int)
+        bin_ukn = np.zeros(np.shape(u_kn))
+        # for now, min and max everywhere.
+        umax = np.max(u_kn)
+        umin = np.min(u_kn)
+        percents = np.linspace(0,100,nbins+1)
+        bins = np.percentile(u_kn,percents)  # bins with even sampling over the entire energy range.
+        bins[-1] *= (1+10E-04) # make it just a bit bigger so nothing out of range.
+        indices = np.digitize(u_kn,bins) # which indices are each sample from?
+        u_kn_smeared = np.zeros([len(N_k),nbins])
+        nbin_sum = 0
+        for i in range(nbins):
+            bool_locations = indices==(i+1)
+            sum_bin = np.sum(bool_locations)
+            rn = np.random.randint(sum_bin)
+            # now, pick random samples from each bin.
+            locarray = np.where(bool_locations)
+            sel = locarray[1][rn]
+            hnbin = int(sum_bin/len(N_k))
+            #u_kn_smeared[:,nbin_sum:nbin_sum+hnbin] = np.tile(u_kn[:,sel],(hnbin,1)).transpose()
+            u_kn_smeared[:,i] = u_kn[:,sel]
+
+        # basic idea: we replace N samples with B bins, each with N_b samples, with \sum B N_b = N.
+        # How is this different from subsampling? We can choose the bins to ensure overlap, at the cost of accuracy.
+        # In theory, we could repeat with finer bins a couple of iterations.
+        # To make the statistical mechanics most straightforward, we want to make sure that 
+        import pdb
+        pdb.set_trace()
+
+        Ntot = np.sum(N_k)
+        f_k_nonzero, all_results = solve_mbar(u_kn_smeared,(nbins/Ntot)*N_k[states_with_samples],f_k[states_with_samples],solver_protocol=binning_protocol)
+        import pdb
+        pdb.set_trace()
         f_k[states_with_samples] = f_k_nonzero
         f_k_nonzero, all_results = solve_mbar(u_kn[states_with_samples], N_k[states_with_samples], f_k[states_with_samples], solver_protocol=solver_protocol)
 

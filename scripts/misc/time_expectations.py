@@ -31,6 +31,3 @@ fe_sigma - fe_sigma0
 
 %time A, dA = mbar.computeExpectations(x, compute_uncertainty=False)
 %time A = mbar0.computeExpectations(x, compute_uncertainty=False)
-
-
-
