@@ -657,7 +657,7 @@ print("============================================")
 # The dimensionless free energy is therefore
 #   f(beta,K) = - (1/2) * ln[ (2 pi) / (beta K) ]
 #
-# In this problem, we are investigating the sum of two Gaussians, once
+# In this problem, we are investigating the sum of two Gaussians, one
 # centered at 0, and others centered at grid points.
 #
 #   V(x;K) = (K0/2) * [(x-x_0)^2]

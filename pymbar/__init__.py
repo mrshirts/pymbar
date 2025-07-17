@@ -25,7 +25,7 @@ ratio (MBAR) estimator.
 
 __author__ = "Michael R. Shirts and John D. Chodera"
 __license__ = "MIT"
-__maintainer__ = "Levi N. Naden, Jaime Rodríguez-Guerra, Michael R. Shirts and John D. Chodera"
+__maintainer__ = "Levi N. Naden, Jaime Rodriguez-Guerra, Michael R. Shirts and John D. Chodera"
 __email__ = "levi.naden@choderalab.org,jaime.rodriguez-guerra@choderalab.org,michael.shirts@colorado.edu,john.chodera@choderalab.org"
 
 from . import timeseries, testsystems, confidenceintervals
